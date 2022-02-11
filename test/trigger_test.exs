@@ -80,7 +80,7 @@ defmodule TriggerTest do
       identity = fn x -> x end
 
       inner = Trigger.load(three)
-      outer = Trigger.load(Trigger.execute(inner))
+      outer = Trigger.load(&Trigger.execute/1, inner)
         |> Trigger.load(five)
         |> Trigger.load(identity, self())
 
