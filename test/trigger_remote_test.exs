@@ -37,5 +37,38 @@ defmodule Trigger.RemoteTest do
 
       assert {:ok, [{:ok, :completed}, 3, 9]} = Remote.execute(outer_pid, return_results: true)
     end
+
+    test "can load partial functions" do
+      multiple = fn a, b, c -> "#{a} #{b} #{c}" end
+
+      {:ok, pid} =
+        multiple
+          |> Trigger.partial()
+          |> Trigger.partial("Applying")
+          |> Trigger.partial([:partial, "arguments"])
+          |> Remote.load_initial()
+
+      assert {:ok, ["Applying partial arguments"]} = Remote.execute(pid, return_results: true, ordered: true)
+    end
+
+    # FIXME shouldn't need to use then() here
+    test "can load multiple functions and partial functions" do
+      identity = fn x -> x end
+      stubborn = fn _x -> 3 end
+      best_number = fn _x -> 9 end
+      multiple = fn a, b, c -> "#{a} #{b} #{c}" end
+
+      {:ok, pid} = Remote.load_initial(identity, 1)
+      Remote.load(pid, stubborn, 2)
+      multiple
+        |> Trigger.partial()
+        |> Trigger.partial("Applying")
+        |> Trigger.partial(:partial)
+        |> Trigger.partial("arguments")
+        |> then(&Remote.load(pid, &1))
+      Remote.load(pid, best_number, 3)
+
+      assert {:ok, [1, 3, "Applying partial arguments", 9]} = Remote.execute(pid, return_results: true, ordered: true)
+    end
   end
 end
