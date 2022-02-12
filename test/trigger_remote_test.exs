@@ -51,7 +51,6 @@ defmodule Trigger.RemoteTest do
       assert {:ok, ["Applying partial arguments"]} = Remote.execute(pid, return_results: true, ordered: true)
     end
 
-    # FIXME shouldn't need to use then() here
     test "can load multiple functions and partial functions" do
       identity = fn x -> x end
       stubborn = fn _x -> 3 end
@@ -65,10 +64,49 @@ defmodule Trigger.RemoteTest do
         |> Trigger.partial("Applying")
         |> Trigger.partial(:partial)
         |> Trigger.partial("arguments")
-        |> then(&Remote.load(pid, &1))
+        |> Remote.load(pid)
       Remote.load(pid, best_number, 3)
 
       assert {:ok, [1, 3, "Applying partial arguments", 9]} = Remote.execute(pid, return_results: true, ordered: true)
+    end
+  end
+
+  describe "load_covert/2 " do
+    test "allows calls in a pipe without interrupting control flow" do
+      state = 1..9
+      {:ok, remote} = Remote.arm()
+
+      state =
+        state
+        |> Enum.map(fn x -> rem(x, 2) end)
+        |> Enum.map(fn x -> {x, x * 3} end)
+        |> Remote.load_covert(remote, &Enum.max/1, [send: true])
+        |> Enum.filter(fn {y, _z} -> rem(y, 2) == 0 end)
+        |> Enum.dedup()
+
+      assert [{0, 0}] == state
+      assert {:ok, [{1, 3}]} = Remote.execute(remote, return_results: true)
+    end
+  end
+
+  describe "execute_covert/2 " do
+    test "allows results to be retreived later" do
+      identity = fn x -> x end
+      add = fn x, y -> x + y end
+
+      {:ok, remote} = Remote.load_initial(identity, 3)
+
+      state =
+        1
+        |> add.(1)
+        |> add.(2)
+        |> add.(3)
+        |> Remote.execute_covert(remote, [return_results: true])
+        |> add.(4)
+        |> add.(5)
+
+      assert 16 == state
+      assert {:ok, [3]} = Remote.recover(remote)
     end
   end
 end
